@@ -2,6 +2,7 @@ from fuzzywuzzy import fuzz
 import csv
 import os
 import sys
+import re
 
 
 def get_column_map(row):
@@ -13,11 +14,12 @@ def get_column_map(row):
     return column_map
 
 
-def find_best_match(source_product_name):
-    best_upc = None
-    best_name = None
-    best_ratio = 0
+def clean_name(name):
+    return re.sub(r'[^a-zA-Z0-9\s]', '', name)
 
+
+def read_lookup_file():
+    rows = []
     with open(lookup_file_path, "r", encoding='utf-8-sig') as lookup_file:
         lookup_reader = csv.reader(lookup_file, delimiter=',')
         lookup_column_map = get_column_map(next(lookup_reader))
@@ -33,12 +35,30 @@ def find_best_match(source_product_name):
         for lookup_row in lookup_reader:
             lookup_name = lookup_row[lookup_column_map[lookup_product_name_column_name]]
             lookup_upc = lookup_row[lookup_column_map[lookup_upc_column_name]]
-            current_row_ratio = fuzz.ratio(source_product_name, lookup_name)
 
-            if current_row_ratio > best_ratio:
-                best_ratio = current_row_ratio
-                best_upc = lookup_upc
-                best_name = lookup_name
+            rows.append({
+                "upc": lookup_upc,
+                "name": lookup_name,
+                "name_clean": clean_name(lookup_name)
+            })
+    return rows
+
+
+def find_best_match(source_product_name, lookup_rows):
+    best_upc = ""
+    best_name = ""
+    best_ratio = 0
+
+    for row in lookup_rows:
+        lookup_name = row['name']
+        lookup_name_clean = row['name_clean']
+        lookup_upc = row['upc']
+        current_row_ratio = fuzz.ratio(clean_name(source_product_name), lookup_name_clean)
+
+        if current_row_ratio > best_ratio:
+            best_ratio = current_row_ratio
+            best_upc = lookup_upc
+            best_name = lookup_name
 
     return {
         "upc": best_upc,
@@ -72,6 +92,8 @@ def main():
         print("Lookup file does not exist: " + lookup_file_path)
         sys.exit(1)
 
+    lookup_rows = read_lookup_file()
+
     with open(source_file_path, "r", encoding='utf-8-sig') as source_file:
         with open(output_file_path, "w", encoding='utf-8-sig') as output_file:
             output_writer = csv.writer(output_file, delimiter=',')
@@ -99,7 +121,7 @@ def main():
 
                 # Find the best match
                 source_name = row[source_column_map[source_product_name_column_name]]
-                best_match = find_best_match(source_name)
+                best_match = find_best_match(source_name, lookup_rows)
 
                 # Write the row to the results file
                 write_row = row.copy()
