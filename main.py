@@ -15,6 +15,7 @@ def get_column_map(row):
 
 def find_best_match(source_product_name):
     best_upc = None
+    best_name = None
     best_ratio = 0
 
     with open(lookup_file_path, "r", encoding='utf-8-sig') as lookup_file:
@@ -37,8 +38,13 @@ def find_best_match(source_product_name):
             if current_row_ratio > best_ratio:
                 best_ratio = current_row_ratio
                 best_upc = lookup_upc
+                best_name = lookup_name
 
-    return best_upc
+    return {
+        "upc": best_upc,
+        "name": best_name,
+        "score": best_ratio
+    }
 
 
 def input_or_default(prompt, default):
@@ -62,10 +68,6 @@ def main():
         print("Source file does not exist: " + source_file_path)
         sys.exit(1)
 
-    if os.path.exists(output_file_path) is False:
-        print("Output file does not exist: " + output_file_path)
-        sys.exit(1)
-
     if os.path.exists(lookup_file_path) is False:
         print("Lookup file does not exist: " + lookup_file_path)
         sys.exit(1)
@@ -85,21 +87,25 @@ def main():
             # Write the header row to the output file
             output_header_row = header_row.copy()
             output_header_row.append("matching_upc")
+            output_header_row.append("matching_name")
+            output_header_row.append("matching_score")
             output_writer.writerow(output_header_row)
 
             for row in source_reader:
 
                 counter += 1
-                if counter % 1000 == 0:
+                if counter % 100 == 0:
                     print("Processing line: " + str(counter))
 
                 # Find the best match
                 source_name = row[source_column_map[source_product_name_column_name]]
-                matching_upc = find_best_match(source_name)
+                best_match = find_best_match(source_name)
 
                 # Write the row to the results file
                 write_row = row.copy()
-                write_row.append(matching_upc)
+                write_row.append(str(best_match["upc"]))
+                write_row.append(str(best_match["name"]))
+                write_row.append(str(best_match["score"]))
                 output_writer.writerow(write_row)
 
 
